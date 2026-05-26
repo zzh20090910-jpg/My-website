@@ -186,10 +186,12 @@
 
       <div class="actions">
         <button id="convertBtn" type="button" class="primary-btn" disabled>选择路径并导出 PDF</button>
+        <button id="aiBtn" type="button" class="secondary-btn" disabled>AI 总结文档</button>
         <button id="clearBtn" type="button" class="secondary-btn" disabled>清空文件</button>
       </div>
 
       <div id="status" class="status"></div>
+      <div id="aiBox" class="status"></div>
     </section>
 
     <section class="panel">
@@ -228,6 +230,8 @@
     const preview = document.getElementById("preview");
     const statusBox = document.getElementById("status");
     const convertBtn = document.getElementById("convertBtn");
+    const aiBtn = document.getElementById("aiBtn");
+    const aiBox = document.getElementById("aiBox");
     const clearBtn = document.getElementById("clearBtn");
     const fileInfo = document.getElementById("fileInfo");
     const mainTitle = document.getElementById("mainTitle");
@@ -386,10 +390,13 @@
       pptExtractedSlides = [];
       fileInput.value = "";
       convertBtn.disabled = true;
+      aiBtn.disabled = true;
       clearBtn.disabled = true;
       fileInfo.textContent = "当前还没有选择文件。";
       statusBox.className = "status";
       statusBox.textContent = "";
+      aiBox.className = "status";
+      aiBox.textContent = "";
       preview.innerHTML = '<div class="empty-preview">上传文件后，这里会显示预览</div>';
     }
 
@@ -461,6 +468,7 @@
           renderFooters: true
         });
         convertBtn.disabled = false;
+        aiBtn.disabled = false;
         showStatus("Word 预览生成成功。现在可以导出 PDF。", "success");
       } catch (error) {
         console.error(error);
@@ -492,6 +500,7 @@
           '<div class="text-page"><div class="text-page-title">第 ' + (index + 1) + ' 页</div>' + escapeHtml(text) + '</div>'
         ).join("");
         convertBtn.disabled = false;
+        aiBtn.disabled = false;
         showStatus("PDF 文字提取完成，共 " + pdfDoc.numPages + " 页。现在可以导出 Word。", "success");
       } catch (error) {
         console.error(error);
@@ -521,6 +530,7 @@
           preview.appendChild(img);
         }
         convertBtn.disabled = false;
+        aiBtn.disabled = false;
         showStatus("PDF 页面预览生成成功，共 " + pdfDoc.numPages + " 页。现在可以导出 PPT。", "success");
       } catch (error) {
         console.error(error);
@@ -554,6 +564,7 @@
           return '<section class="ppt-slide"><h3>Slide ' + (index + 1) + '</h3>' + body + '</section>';
         }).join("");
         convertBtn.disabled = false;
+        aiBtn.disabled = false;
         showStatus("PPTX 文字提取完成，共 " + pptExtractedSlides.length + " 张幻灯片。现在可以导出文字版 PDF。", "success");
       } catch (error) {
         console.error(error);
@@ -701,6 +712,73 @@
       showStatus("PDF 已成功保存。注意：这是 PPTX 文字提取版，不是完整排版复刻。", "success");
     }
 
+    function getTextForAI() {
+      if (currentMode === "pdfToWord" && pdfTextPages.length) {
+        return pdfTextPages.join("
+
+");
+      }
+
+      if (currentMode === "pptToPdf" && pptExtractedSlides.length) {
+        return pptExtractedSlides
+          .map((slide, index) => "Slide " + (index + 1) + ":
+" + slide.join("
+"))
+          .join("
+
+");
+      }
+
+      if (currentMode === "pdfToPpt" && pdfDoc) {
+        const text = preview.innerText || "";
+        return text.trim() || "用户上传了一个 PDF，网页会把 PDF 每一页转成图片并放进 PPT。请根据这个转换任务说明输出使用建议。";
+      }
+
+      return preview.innerText || "";
+    }
+
+    async function askAI() {
+      const text = getTextForAI();
+
+      if (!text || text.trim().length < 20) {
+        aiBox.textContent = "没有足够的文字可以给 AI 总结。请先上传文件并生成预览。";
+        aiBox.className = "status show error";
+        return;
+      }
+
+      aiBtn.disabled = true;
+      aiBox.textContent = "AI 正在分析文档，请稍等……";
+      aiBox.className = "status show";
+
+      try {
+        const response = await fetch("/.netlify/functions/ai-summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: text, task: "summary" })
+        });
+
+        let data = {};
+        try {
+          data = await response.json();
+        } catch (jsonError) {
+          throw new Error("AI Function 没有返回 JSON。请检查 netlify/functions/ai-summary.js 是否已经创建并部署。");
+        }
+
+        if (!response.ok) {
+          throw new Error(data.error || "AI 请求失败。请检查 OPENAI_API_KEY 或 Function 部署状态。");
+        }
+
+        aiBox.textContent = data.result || "AI 没有返回内容。";
+        aiBox.className = "status show success";
+      } catch (error) {
+        console.error(error);
+        aiBox.textContent = "AI 分析失败：" + getReadableError(error);
+        aiBox.className = "status show error";
+      } finally {
+        aiBtn.disabled = false;
+      }
+    }
+
     async function exportFile() {
       if (!currentFile) { showStatus("请先上传文件。", "error"); return; }
       convertBtn.disabled = true;
@@ -718,6 +796,7 @@
         }
       } finally {
         convertBtn.disabled = false;
+        aiBtn.disabled = false;
       }
     }
 
@@ -749,6 +828,7 @@
     });
 
     convertBtn.addEventListener("click", exportFile);
+    aiBtn.addEventListener("click", askAI);
     clearBtn.addEventListener("click", clearAll);
 
     uploadCard.addEventListener("dragover", event => {

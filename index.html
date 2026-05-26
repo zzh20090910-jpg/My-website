@@ -544,7 +544,7 @@
         uploadTitle: "点击上传 PDF 文件",
         uploadText: "支持拖拽上传。输出为可打开的 .docx 文字文档。",
         accept: ".pdf,application/pdf",
-        convertText: "导出 Word 文件",
+        convertText: "选择路径并导出 Word 文件",
         previewTitle: "PDF 文字预览",
         previewNote: "这里显示从 PDF 中提取出的文字。扫描版 PDF 可能提取不到文字。",
         info: [
@@ -560,7 +560,7 @@
         uploadTitle: "点击上传 PDF 文件",
         uploadText: "支持拖拽上传。输出为 .pptx 文件。",
         accept: ".pdf,application/pdf",
-        convertText: "导出 PPT 文件",
+        convertText: "选择路径并导出 PPT 文件",
         previewTitle: "PDF 页面预览",
         previewNote: "每一页 PDF 会变成 PPT 中的一张图片幻灯片。",
         info: [
@@ -576,7 +576,7 @@
         uploadTitle: "点击上传 PPTX 文件",
         uploadText: "支持拖拽上传。当前主要支持 .pptx，不支持旧版 .ppt。",
         accept: ".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        convertText: "导出 PDF 文件",
+        convertText: "选择路径并导出 PDF 文件",
         previewTitle: "PPT 文字预览",
         previewNote: "这里显示每张幻灯片提取出的文字内容。",
         info: [
@@ -1009,8 +1009,12 @@
         slide.addImage({ data: imgData, x: 0, y: 0, w: slideW, h: slideH });
       }
 
-      await pptx.writeFile({ fileName });
-      showStatus("PPT 文件已成功生成。注意：每页 PDF 是作为图片放入 PPT 的，文字通常不可编辑。", "success");
+      const pptMimeType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+      const result = await pptx.write({ outputType: "blob" });
+      const blob = result instanceof Blob ? result : new Blob([result], { type: pptMimeType });
+
+      await saveBlobWithPicker(blob, fileName, pptMimeType, "PowerPoint Presentation");
+      showStatus("PPT 文件已成功保存。注意：每页 PDF 是作为图片放入 PPT 的，文字通常不可编辑。", "success");
     }
 
     async function exportPptToPdf() {

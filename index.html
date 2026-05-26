@@ -18,6 +18,11 @@
   <!-- Word 预览和 Word -> PDF -->
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/docx-preview@0.3.6/dist/docx-preview.min.js"></script>
+  <script>
+    // docx-preview 和 docx 生成库都会使用 window.docx。
+    // 先把 Word 预览库保存起来，避免后面被 docx 生成库覆盖。
+    window.docxPreviewLib = window.docx;
+  </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- PDF 读取 / 渲染 -->
@@ -632,28 +637,52 @@
     }
 
     async function saveBlobWithPicker(blob, fileName, mimeType, extensionDescription) {
-      if (!window.showSaveFilePicker) {
-        downloadBlobNormally(blob, fileName);
-        showStatus("当前浏览器不支持选择下载路径，文件已保存到默认下载文件夹。建议用 Chrome 或 Edge 获得选择路径功能。", "success");
+      const safeBlob = blob instanceof Blob ? blob : new Blob([blob], { type: mimeType });
+
+      // Safari / Firefox / 手机浏览器 / 非 HTTPS 环境可能不支持选择路径。
+      // 不支持时直接下载到默认 Downloads，避免保存时报错导致转换失败。
+      if (!window.isSecureContext || !window.showSaveFilePicker) {
+        downloadBlobNormally(safeBlob, fileName);
+        showStatus("当前浏览器不支持选择下载路径，文件已保存到默认下载文件夹。建议用 Chrome 或 Edge 打开 Netlify 网址。", "success");
         return;
       }
 
-      const ext = fileName.slice(fileName.lastIndexOf("."));
-      const fileHandle = await window.showSaveFilePicker({
-        suggestedName: fileName,
-        types: [
-          {
-            description: extensionDescription,
-            accept: {
-              [mimeType]: [ext]
+      try {
+        const ext = fileName.slice(fileName.lastIndexOf("."));
+        const fileHandle = await window.showSaveFilePicker({
+          suggestedName: fileName,
+          types: [
+            {
+              description: extensionDescription,
+              accept: {
+                [mimeType]: [ext]
+              }
             }
-          }
-        ]
-      });
+          ],
+          excludeAcceptAllOption: false
+        });
 
-      const writable = await fileHandle.createWritable();
-      await writable.write(blob);
-      await writable.close();
+        const writable = await fileHandle.createWritable();
+        await writable.write(safeBlob);
+        await writable.close();
+      } catch (error) {
+        if (error && error.name === "AbortError") {
+          throw error;
+        }
+
+        // 部分浏览器会因为权限、文件类型、系统限制导致 picker 保存失败。
+        // 这里自动 fallback 到普通下载，不让整个转换流程失败。
+        console.warn("选择路径保存失败，已改用普通下载：", error);
+        downloadBlobNormally(safeBlob, fileName);
+        showStatus("选择路径保存失败，已自动保存到默认下载文件夹。", "success");
+      }
+    }
+
+    function getReadableError(error) {
+      if (!error) return "未知错误";
+      const name = error.name ? error.name : "Error";
+      const message = error.message ? error.message : String(error);
+      return `${name}: ${message}`;
     }
 
     function updateFileInfo(file, outputName) {
@@ -750,7 +779,11 @@
 
       try {
         const arrayBuffer = await file.arrayBuffer();
-        await docx.renderAsync(arrayBuffer, preview, null, {
+        if (!window.docxPreviewLib || !window.docxPreviewLib.renderAsync) {
+          throw new Error("Word 预览库加载失败，请刷新页面后重试。");
+        }
+
+        await window.docxPreviewLib.renderAsync(arrayBuffer, preview, null, {
           className: "docx",
           inWrapper: true,
           ignoreWidth: false,
@@ -932,6 +965,10 @@
       const fileName = replaceExtension(currentFile.name, ".docx");
       showStatus("正在生成 Word 文档……");
 
+      if (!window.docx || !window.docx.Document || !window.docx.Packer) {
+        throw new Error("Word 生成库加载失败，请刷新页面后重试。");
+      }
+
       const { Document, Packer, Paragraph, TextRun, PageBreak } = window.docx;
       const children = [];
 
@@ -1010,9 +1047,15 @@
       }
 
       const pptMimeType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-      const result = await pptx.write({ outputType: "blob" });
-      const blob = result instanceof Blob ? result : new Blob([result], { type: pptMimeType });
+      let result;
+      try {
+        result = await pptx.write({ outputType: "blob" });
+      } catch (error) {
+        // 有些浏览器 / PptxGenJS 版本对 blob 输出不稳定，改用 arraybuffer。
+        result = await pptx.write({ outputType: "arraybuffer" });
+      }
 
+      const blob = result instanceof Blob ? result : new Blob([result], { type: pptMimeType });
       await saveBlobWithPicker(blob, fileName, pptMimeType, "PowerPoint Presentation");
       showStatus("PPT 文件已成功保存。注意：每页 PDF 是作为图片放入 PPT 的，文字通常不可编辑。", "success");
     }
@@ -1048,7 +1091,7 @@
         if (error && error.name === "AbortError") {
           showStatus("你取消了保存操作，文件没有被下载。", "error");
         } else {
-          showStatus("生成或保存失败。可能是文件过大、文件格式复杂，或者浏览器限制导致。", "error");
+          showStatus("生成或保存失败。请先刷新页面再试一次。\n具体错误：" + getReadableError(error), "error");
         }
       } finally {
         convertBtn.disabled = false;

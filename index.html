@@ -12,7 +12,6 @@
     3. PDF -> Word：主要提取 PDF 里的文字，无法 100% 还原原始排版。
     4. PDF -> PPT：把 PDF 每一页变成图片并放入 PPT，外观较稳定，但文字不可编辑。
     5. PPT -> PDF：这里只支持 .pptx 的文字内容版 PDF，复杂图片、动画、母版、图表无法完整还原。
-    6. AI 功能需要你在 Netlify 创建 netlify/functions/ai-summary.js，并设置 OPENAI_API_KEY。
   -->
 
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -232,12 +231,10 @@
 
       <div class="actions">
         <button id="convertBtn" type="button" class="primary-btn" disabled>选择路径并导出 PDF</button>
-        <button id="aiBtn" type="button" class="secondary-btn" disabled>AI 总结文档</button>
         <button id="clearBtn" type="button" class="secondary-btn" disabled>清空文件</button>
       </div>
 
       <div id="status" class="status"></div>
-      <div id="aiBox" class="status"></div>
     </section>
 
     <section class="panel">
@@ -276,9 +273,7 @@
       const uploadCard = document.getElementById("uploadCard");
       const preview = document.getElementById("preview");
       const statusBox = document.getElementById("status");
-      const aiBox = document.getElementById("aiBox");
       const convertBtn = document.getElementById("convertBtn");
-      const aiBtn = document.getElementById("aiBtn");
       const clearBtn = document.getElementById("clearBtn");
       const fileInfo = document.getElementById("fileInfo");
       const mainTitle = document.getElementById("mainTitle");
@@ -353,13 +348,6 @@
         statusBox.className = "status show";
         if (type === "success") statusBox.classList.add("success");
         if (type === "error") statusBox.classList.add("error");
-      }
-
-      function showAiStatus(message, type = "normal") {
-        aiBox.textContent = message;
-        aiBox.className = "status show";
-        if (type === "success") aiBox.classList.add("success");
-        if (type === "error") aiBox.classList.add("error");
       }
 
       function formatFileSize(bytes) {
@@ -446,13 +434,10 @@
         pptExtractedSlides = [];
         fileInput.value = "";
         convertBtn.disabled = true;
-        aiBtn.disabled = true;
         clearBtn.disabled = true;
         fileInfo.textContent = "当前还没有选择文件。";
         statusBox.className = "status";
         statusBox.textContent = "";
-        aiBox.className = "status";
-        aiBox.textContent = "";
         preview.innerHTML = '<div class="empty-preview">上传文件后，这里会显示预览</div>';
       }
 
@@ -498,9 +483,6 @@
         currentFile = file;
         clearBtn.disabled = false;
         convertBtn.disabled = true;
-        aiBtn.disabled = true;
-        aiBox.className = "status";
-        aiBox.textContent = "";
 
         try {
           if (currentMode === "wordToPdf") await renderWordDocx(file);
@@ -534,8 +516,7 @@
             renderFooters: true
           });
           convertBtn.disabled = false;
-          aiBtn.disabled = false;
-          showStatus("Word 预览生成成功。现在可以导出 PDF 或使用 AI 总结。", "success");
+          showStatus("Word 预览生成成功。现在可以导出 PDF。", "success");
         } catch (error) {
           console.error(error);
           preview.innerHTML = '<div class="empty-preview">预览失败，请检查文件格式</div>';
@@ -566,8 +547,7 @@
             return '<div class="text-page"><div class="text-page-title">第 ' + (index + 1) + ' 页</div>' + escapeHtml(text) + '</div>';
           }).join("");
           convertBtn.disabled = false;
-          aiBtn.disabled = false;
-          showStatus("PDF 文字提取完成，共 " + pdfDoc.numPages + " 页。现在可以导出 Word 或使用 AI 总结。", "success");
+          showStatus("PDF 文字提取完成，共 " + pdfDoc.numPages + " 页。现在可以导出 Word。", "success");
         } catch (error) {
           console.error(error);
           preview.innerHTML = '<div class="empty-preview">PDF 读取失败，请检查文件格式</div>';
@@ -596,7 +576,6 @@
             preview.appendChild(img);
           }
           convertBtn.disabled = false;
-          aiBtn.disabled = false;
           showStatus("PDF 页面预览生成成功，共 " + pdfDoc.numPages + " 页。现在可以导出 PPT。", "success");
         } catch (error) {
           console.error(error);
@@ -632,8 +611,7 @@
             return '<section class="ppt-slide"><h3>Slide ' + (index + 1) + '</h3>' + body + '</section>';
           }).join("");
           convertBtn.disabled = false;
-          aiBtn.disabled = false;
-          showStatus("PPTX 文字提取完成，共 " + pptExtractedSlides.length + " 张幻灯片。现在可以导出文字版 PDF 或使用 AI 总结。", "success");
+          showStatus("PPTX 文字提取完成，共 " + pptExtractedSlides.length + " 张幻灯片。现在可以导出文字版 PDF。", "success");
         } catch (error) {
           console.error(error);
           preview.innerHTML = '<div class="empty-preview">PPTX 读取失败，请检查文件格式</div>';
@@ -789,50 +767,6 @@
         showStatus("PDF 已成功保存。注意：这是 PPTX 文字提取版，不是完整排版复刻。", "success");
       }
 
-      function getTextForAI() {
-        if (currentMode === "pdfToWord" && pdfTextPages.length) return pdfTextPages.join("\n\n");
-        if (currentMode === "pptToPdf" && pptExtractedSlides.length) {
-          return pptExtractedSlides.map(function (slide, index) {
-            return "Slide " + (index + 1) + ":\n" + slide.join("\n");
-          }).join("\n\n");
-        }
-        if (currentMode === "pdfToPpt" && pdfDoc) {
-          const text = preview.innerText || "";
-          return text.trim() || "用户上传了一个 PDF，网页会把 PDF 每一页转成图片并放进 PPT。请根据这个转换任务说明输出使用建议。";
-        }
-        return preview.innerText || "";
-      }
-
-      async function askAI() {
-        const text = getTextForAI();
-        if (!text || text.trim().length < 20) {
-          showAiStatus("没有足够的文字可以给 AI 总结。请先上传文件并生成预览。", "error");
-          return;
-        }
-        aiBtn.disabled = true;
-        showAiStatus("AI 正在分析文档，请稍等……");
-        try {
-          const response = await fetch("/.netlify/functions/ai-summary", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: text, task: "summary" })
-          });
-          let data = {};
-          try {
-            data = await response.json();
-          } catch (jsonError) {
-            throw new Error("AI Function 没有返回 JSON。请检查 netlify/functions/ai-summary.js 是否已经创建并部署。");
-          }
-          if (!response.ok) throw new Error(data.error || "AI 请求失败。请检查 OPENAI_API_KEY 或 Function 部署状态。");
-          showAiStatus(data.result || "AI 没有返回内容。", "success");
-        } catch (error) {
-          console.error(error);
-          showAiStatus("AI 分析失败：" + getReadableError(error), "error");
-        } finally {
-          aiBtn.disabled = false;
-        }
-      }
-
       async function exportFile() {
         if (!currentFile) { showStatus("请先上传文件。", "error"); return; }
         convertBtn.disabled = true;
@@ -867,7 +801,7 @@
         console.assert(replaceExtension("filename", ".pdf") === "filename.pdf", "replaceExtension no extension failed");
         console.assert(formatFileSize(1024) === "1.0 KB", "formatFileSize KB failed");
         console.assert(escapeHtml("<a>&\"").includes("&lt;a&gt;"), "escapeHtml failed");
-        console.assert(Boolean(fileInput && chooseFileBtn && uploadCard && convertBtn && aiBtn), "required DOM elements missing");
+        console.assert(Boolean(fileInput && chooseFileBtn && uploadCard && convertBtn), "required DOM elements missing");
         console.assert(modes.wordToPdf.accept.includes(".docx"), "word accept missing docx");
         console.assert(modes.pdfToPpt.accept.includes(".pdf"), "pdf accept missing pdf");
         console.log("ZZH converter self-tests passed.");
@@ -908,7 +842,6 @@
       });
 
       convertBtn.addEventListener("click", exportFile);
-      aiBtn.addEventListener("click", askAI);
       clearBtn.addEventListener("click", clearAll);
 
       uploadCard.addEventListener("dragover", function (event) {

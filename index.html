@@ -6,13 +6,13 @@
   <title>文件转换工具 By: 大帅哥ZZH</title>
 
   <!--
-    重要说明：
-    1. 本网页尽量在浏览器本地完成处理，不主动上传文件到服务器。
+    说明：
+    1. 本网页尽量在浏览器本地处理文件，不主动上传文件到服务器。
     2. Word -> PDF：主要支持 .docx。
     3. PDF -> Word：主要提取 PDF 里的文字，无法 100% 还原原始排版。
-    4. PDF -> PPT：把 PDF 每一页变成图片并放入 PPT，所以外观较稳定，但文字不可编辑。
-    5. PPT -> PDF：这里只支持 .pptx 的“文字内容版”PDF，复杂图片、动画、母版、图表无法完整还原。
-    6. 如果你需要 100% 高精度转换，需要服务器后端，例如 LibreOffice / Microsoft Graph / 第三方 API。
+    4. PDF -> PPT：把 PDF 每一页变成图片并放入 PPT，外观较稳定，但文字不可编辑。
+    5. PPT -> PDF：这里只支持 .pptx 的文字内容版 PDF，复杂图片、动画、母版、图表无法完整还原。
+    6. AI 功能需要你在 Netlify 创建 netlify/functions/ai-summary.js，并设置 OPENAI_API_KEY。
   -->
 
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -26,6 +26,7 @@
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
       background: linear-gradient(135deg, #edf2ff, #f8fafc);
@@ -33,7 +34,9 @@
       color: #1f2937;
       padding: 32px;
     }
+
     .app { max-width: 1160px; margin: 0 auto; }
+
     .hero {
       background: rgba(255,255,255,.88);
       backdrop-filter: blur(14px);
@@ -43,6 +46,7 @@
       box-shadow: 0 24px 60px rgba(15,23,42,.1);
       margin-bottom: 24px;
     }
+
     .badge {
       display: inline-flex;
       align-items: center;
@@ -55,6 +59,7 @@
       font-weight: 600;
       margin-bottom: 16px;
     }
+
     h1 {
       font-size: clamp(32px, 5vw, 54px);
       line-height: 1.08;
@@ -62,8 +67,11 @@
       margin-bottom: 14px;
       color: #111827;
     }
+
     .subtitle { max-width: 820px; color: #4b5563; font-size: 17px; line-height: 1.75; margin-bottom: 24px; }
+
     .mode-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 22px; }
+
     .mode-btn {
       padding: 15px 12px;
       border-radius: 16px;
@@ -72,7 +80,9 @@
       border: 1px solid #e5e7eb;
       box-shadow: 0 10px 22px rgba(15,23,42,.05);
     }
+
     .mode-btn.active { background: #4f46e5; color: white; border-color: #4f46e5; box-shadow: 0 14px 24px rgba(79,70,229,.24); }
+
     .upload-card {
       border: 2px dashed #a5b4fc;
       background: #f8faff;
@@ -82,8 +92,16 @@
       transition: .25s ease;
       cursor: pointer;
       display: block;
+      user-select: none;
     }
-    .upload-card:hover, .upload-card.drag-over { border-color: #4f46e5; background: #eef2ff; transform: translateY(-2px); }
+
+    .upload-card:hover,
+    .upload-card.drag-over {
+      border-color: #4f46e5;
+      background: #eef2ff;
+      transform: translateY(-2px);
+    }
+
     .upload-icon {
       width: 68px;
       height: 68px;
@@ -96,16 +114,21 @@
       font-size: 34px;
       box-shadow: 0 16px 30px rgba(79,70,229,.26);
     }
+
     .upload-title { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
     .upload-text { color: #6b7280; margin-bottom: 18px; line-height: 1.6; }
+
     input[type="file"] { display: none; }
+
     .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; margin-top: 22px; }
+
     button { border: none; border-radius: 14px; padding: 13px 20px; font-size: 15px; font-weight: 700; cursor: pointer; transition: .2s ease; }
     .primary-btn { background: #4f46e5; color: white; box-shadow: 0 14px 24px rgba(79,70,229,.24); }
     .primary-btn:hover:not(:disabled) { background: #4338ca; transform: translateY(-1px); }
     .secondary-btn { background: white; color: #374151; border: 1px solid #e5e7eb; }
     .secondary-btn:hover:not(:disabled) { background: #f9fafb; }
     button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+
     .status {
       margin-top: 18px;
       padding: 14px 16px;
@@ -117,29 +140,51 @@
       display: none;
       white-space: pre-line;
     }
+
     .status.show { display: block; }
     .status.success { background: #ecfdf5; color: #047857; }
     .status.error { background: #fef2f2; color: #b91c1c; }
+
     .panel { display: grid; grid-template-columns: 310px 1fr; gap: 24px; align-items: start; }
-    .side-card, .preview-wrap {
+
+    .side-card,
+    .preview-wrap {
       background: rgba(255,255,255,.9);
       border-radius: 24px;
       box-shadow: 0 18px 46px rgba(15,23,42,.08);
       border: 1px solid rgba(255,255,255,.8);
     }
+
     .side-card { padding: 24px; position: sticky; top: 24px; }
     .side-card h2, .preview-header h2 { font-size: 20px; margin-bottom: 14px; color: #111827; }
+
     .info-list { list-style: none; display: grid; gap: 12px; color: #4b5563; font-size: 14px; line-height: 1.55; }
     .info-list li { padding-left: 24px; position: relative; }
     .info-list li::before { content: "✓"; position: absolute; left: 0; top: 0; color: #4f46e5; font-weight: 900; }
     .warning-list li::before { content: "!"; color: #d97706; }
+
     .file-info { margin-top: 20px; padding: 16px; background: #f9fafb; border-radius: 16px; font-size: 14px; color: #4b5563; line-height: 1.7; word-break: break-word; }
+
     .preview-wrap { overflow: hidden; }
     .preview-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 22px 24px; border-bottom: 1px solid #e5e7eb; background: white; }
     .preview-note { color: #6b7280; font-size: 14px; line-height: 1.5; }
     .preview-scroll { max-height: 780px; overflow: auto; padding: 28px; background: #e5e7eb; }
     #preview { min-height: 520px; background: white; padding: 28px; border-radius: 10px; box-shadow: 0 10px 30px rgba(15,23,42,.1); }
-    .empty-preview { min-height: 460px; display: grid; place-items: center; text-align: center; color: #9ca3af; font-weight: 700; border: 2px dashed #d1d5db; border-radius: 18px; background: #f9fafb; line-height: 1.8; padding: 20px; }
+
+    .empty-preview {
+      min-height: 460px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: #9ca3af;
+      font-weight: 700;
+      border: 2px dashed #d1d5db;
+      border-radius: 18px;
+      background: #f9fafb;
+      line-height: 1.8;
+      padding: 20px;
+    }
+
     .docx-wrapper { background: transparent !important; padding: 0 !important; }
     .docx-wrapper > section.docx { margin: 0 auto 18px !important; box-shadow: 0 8px 22px rgba(15,23,42,.12) !important; }
     .pdf-page-img { display: block; max-width: 100%; margin: 0 auto 20px; border-radius: 10px; box-shadow: 0 8px 22px rgba(15,23,42,.12); background: white; }
@@ -148,6 +193,7 @@
     .ppt-slide { width: 960px; min-height: 540px; background: white; border-radius: 12px; padding: 42px 54px; margin: 0 auto 22px; box-shadow: 0 8px 22px rgba(15,23,42,.12); page-break-after: always; }
     .ppt-slide h3 { font-size: 28px; color: #111827; margin-bottom: 22px; }
     .ppt-slide p { font-size: 18px; color: #374151; line-height: 1.8; margin-bottom: 10px; }
+
     @media (max-width: 900px) {
       body { padding: 18px; }
       .hero { padding: 24px; }
@@ -176,13 +222,13 @@
         <button type="button" class="mode-btn" data-mode="pptToPdf">PPT 转 PDF</button>
       </div>
 
-      <label class="upload-card" id="uploadCard" for="fileInput">
+      <div class="upload-card" id="uploadCard" role="button" tabindex="0">
         <div class="upload-icon">↑</div>
         <div class="upload-title" id="uploadTitle">点击上传 Word 文档</div>
         <div class="upload-text" id="uploadText">支持拖拽上传。推荐使用 .docx 文件。</div>
         <button class="secondary-btn" type="button" id="chooseFileBtn">选择文件</button>
         <input id="fileInput" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
-      </label>
+      </div>
 
       <div class="actions">
         <button id="convertBtn" type="button" class="primary-btn" disabled>选择路径并导出 PDF</button>
@@ -220,633 +266,674 @@
   <script>
     "use strict";
 
-    if (window.pdfjsLib) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-    }
-
-    const fileInput = document.getElementById("fileInput");
-    const chooseFileBtn = document.getElementById("chooseFileBtn");
-    const uploadCard = document.getElementById("uploadCard");
-    const preview = document.getElementById("preview");
-    const statusBox = document.getElementById("status");
-    const convertBtn = document.getElementById("convertBtn");
-    const aiBtn = document.getElementById("aiBtn");
-    const aiBox = document.getElementById("aiBox");
-    const clearBtn = document.getElementById("clearBtn");
-    const fileInfo = document.getElementById("fileInfo");
-    const mainTitle = document.getElementById("mainTitle");
-    const mainSubtitle = document.getElementById("mainSubtitle");
-    const uploadTitle = document.getElementById("uploadTitle");
-    const uploadText = document.getElementById("uploadText");
-    const previewTitle = document.getElementById("previewTitle");
-    const previewNote = document.getElementById("previewNote");
-    const infoList = document.getElementById("infoList");
-    const modeButtons = document.querySelectorAll(".mode-btn");
-
-    const modes = {
-      wordToPdf: {
-        title: "Word 文档转换成 PDF",
-        subtitle: "上传一个 .docx 文件，网页会先生成预览，然后你可以一键导出 PDF。文件在你的浏览器本地处理，不会上传到服务器。",
-        uploadTitle: "点击上传 Word 文档",
-        uploadText: "支持拖拽上传。推荐使用 .docx 文件。",
-        accept: ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        convertText: "选择路径并导出 PDF",
-        previewTitle: "Word 预览",
-        previewNote: "预览内容会作为 PDF 导出的基础。",
-        outputExt: ".pdf",
-        info: ["点击上传，选择一个 Word 的 .docx 文件。", "等待网页生成文档预览。", "点击导出按钮，可以选择保存文件夹和文件名。", "复杂排版可能和 Word 原文有细微差异。", "旧版 .doc 文件建议先用 Word 另存为 .docx。"]
-      },
-      pdfToWord: {
-        title: "PDF 转 Word",
-        subtitle: "上传 PDF 后，网页会提取文字并生成一个 .docx 文件。这个版本主要是文字版，不保证还原 PDF 的原始排版。",
-        uploadTitle: "点击上传 PDF 文件",
-        uploadText: "支持拖拽上传。输出为可打开的 .docx 文字文档。",
-        accept: ".pdf,application/pdf",
-        convertText: "选择路径并导出 Word 文件",
-        previewTitle: "PDF 文字预览",
-        previewNote: "这里显示从 PDF 中提取出的文字。扫描版 PDF 可能提取不到文字。",
-        outputExt: ".docx",
-        info: ["适合普通文字型 PDF。", "扫描版 PDF 本质是图片，不能直接提取文字。", "输出 Word 主要保留文字，不保证原始排版。", "如果要图片 OCR，需要接入 OCR 服务或后端。"]
-      },
-      pdfToPpt: {
-        title: "PDF 转 PPT",
-        subtitle: "上传 PDF 后，网页会把每一页 PDF 渲染成图片，然后每一页放进一张 PPT 幻灯片。这样外观比较稳定，但文字不可编辑。",
-        uploadTitle: "点击上传 PDF 文件",
-        uploadText: "支持拖拽上传。输出为 .pptx 文件。",
-        accept: ".pdf,application/pdf",
-        convertText: "选择路径并导出 PPT 文件",
-        previewTitle: "PDF 页面预览",
-        previewNote: "每一页 PDF 会变成 PPT 中的一张图片幻灯片。",
-        outputExt: ".pptx",
-        info: ["适合把 PDF 变成可展示的 PPT。", "每页 PDF 会作为图片插入 PPT。", "转换后的 PPT 外观较稳定。", "但 PPT 里的文字通常不可直接编辑。"]
-      },
-      pptToPdf: {
-        title: "PPT 转 PDF",
-        subtitle: "上传 .pptx 后，网页会提取每页幻灯片里的文字并生成 PDF。这个纯前端版本不能完整还原复杂 PowerPoint 排版。",
-        uploadTitle: "点击上传 PPTX 文件",
-        uploadText: "支持拖拽上传。当前主要支持 .pptx，不支持旧版 .ppt。",
-        accept: ".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        convertText: "选择路径并导出 PDF 文件",
-        previewTitle: "PPT 文字预览",
-        previewNote: "这里显示每张幻灯片提取出的文字内容。",
-        outputExt: ".pdf",
-        info: ["当前版本主要支持 .pptx。", "这里只能生成文字内容版 PDF。", "图片、动画、图表、母版和复杂排版不会完整还原。", "如果要高精度 PPT 转 PDF，需要后端转换服务。"]
-      }
-    };
-
-    let currentMode = "wordToPdf";
-    let currentFile = null;
-    let pdfDoc = null;
-    let pdfTextPages = [];
-    let pptExtractedSlides = [];
-
-    function showStatus(message, type = "normal") {
-      statusBox.textContent = message;
-      statusBox.className = "status show";
-      if (type === "success") statusBox.classList.add("success");
-      if (type === "error") statusBox.classList.add("error");
-    }
-
-    function formatFileSize(bytes) {
-      if (bytes < 1024) return bytes + " B";
-      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-      return (bytes / 1024 / 1024).toFixed(2) + " MB";
-    }
-
-    function replaceExtension(fileName, newExt) {
-      return fileName.replace(/\.[^.]+$/i, "") + newExt;
-    }
-
-    function escapeHtml(text) {
-      return String(text)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
-
-    function downloadBlobNormally(blob, fileName) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    }
-
-    async function saveBlobWithPicker(blob, fileName, mimeType, description) {
-      const safeBlob = blob instanceof Blob ? blob : new Blob([blob], { type: mimeType });
-
-      if (!window.isSecureContext || !window.showSaveFilePicker) {
-        downloadBlobNormally(safeBlob, fileName);
-        showStatus("当前浏览器不支持选择下载路径，文件已保存到默认下载文件夹。建议用 Chrome 或 Edge 打开 Netlify 网址。", "success");
-        return;
+    document.addEventListener("DOMContentLoaded", function () {
+      if (window.pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
       }
 
-      try {
-        const ext = fileName.slice(fileName.lastIndexOf("."));
-        const fileHandle = await window.showSaveFilePicker({
-          suggestedName: fileName,
-          types: [{ description: description, accept: { [mimeType]: [ext] } }],
-          excludeAcceptAllOption: false
-        });
-        const writable = await fileHandle.createWritable();
-        await writable.write(safeBlob);
-        await writable.close();
-      } catch (error) {
-        if (error && error.name === "AbortError") throw error;
-        console.warn("选择路径保存失败，已改用普通下载：", error);
-        downloadBlobNormally(safeBlob, fileName);
-        showStatus("选择路径保存失败，已自动保存到默认下载文件夹。", "success");
-      }
-    }
+      const fileInput = document.getElementById("fileInput");
+      const chooseFileBtn = document.getElementById("chooseFileBtn");
+      const uploadCard = document.getElementById("uploadCard");
+      const preview = document.getElementById("preview");
+      const statusBox = document.getElementById("status");
+      const aiBox = document.getElementById("aiBox");
+      const convertBtn = document.getElementById("convertBtn");
+      const aiBtn = document.getElementById("aiBtn");
+      const clearBtn = document.getElementById("clearBtn");
+      const fileInfo = document.getElementById("fileInfo");
+      const mainTitle = document.getElementById("mainTitle");
+      const mainSubtitle = document.getElementById("mainSubtitle");
+      const uploadTitle = document.getElementById("uploadTitle");
+      const uploadText = document.getElementById("uploadText");
+      const previewTitle = document.getElementById("previewTitle");
+      const previewNote = document.getElementById("previewNote");
+      const infoList = document.getElementById("infoList");
+      const modeButtons = document.querySelectorAll(".mode-btn");
 
-    function getReadableError(error) {
-      if (!error) return "未知错误";
-      const name = error.name || "Error";
-      const message = error.message || String(error);
-      return name + ": " + message;
-    }
-
-    function updateFileInfo(file, outputName) {
-      fileInfo.innerHTML = "<strong>文件名：</strong>" + escapeHtml(file.name) + "<br>" +
-        "<strong>文件大小：</strong>" + formatFileSize(file.size) + "<br>" +
-        "<strong>导出文件：</strong>" + escapeHtml(outputName);
-    }
-
-    function renderInfoList() {
-      const info = modes[currentMode].info || [];
-      infoList.innerHTML = info.map(item => "<li>" + escapeHtml(item) + "</li>").join("");
-      infoList.classList.toggle("warning-list", currentMode === "pdfToWord" || currentMode === "pptToPdf");
-    }
-
-    function clearAll() {
-      currentFile = null;
-      pdfDoc = null;
-      pdfTextPages = [];
-      pptExtractedSlides = [];
-      fileInput.value = "";
-      convertBtn.disabled = true;
-      aiBtn.disabled = true;
-      clearBtn.disabled = true;
-      fileInfo.textContent = "当前还没有选择文件。";
-      statusBox.className = "status";
-      statusBox.textContent = "";
-      aiBox.className = "status";
-      aiBox.textContent = "";
-      preview.innerHTML = '<div class="empty-preview">上传文件后，这里会显示预览</div>';
-    }
-
-    function setMode(mode) {
-      if (!modes[mode]) return;
-      currentMode = mode;
-      const data = modes[mode];
-      modeButtons.forEach(btn => btn.classList.toggle("active", btn.dataset.mode === mode));
-      mainTitle.textContent = data.title;
-      mainSubtitle.textContent = data.subtitle;
-      uploadTitle.textContent = data.uploadTitle;
-      uploadText.textContent = data.uploadText;
-      fileInput.accept = data.accept;
-      convertBtn.textContent = data.convertText;
-      previewTitle.textContent = data.previewTitle;
-      previewNote.textContent = data.previewNote;
-      renderInfoList();
-      clearAll();
-    }
-
-    function validateFile(file) {
-      if (!file) return false;
-      const name = file.name.toLowerCase();
-      if (currentMode === "wordToPdf" && !name.endsWith(".docx")) {
-        showStatus("目前 Word 转 PDF 主要支持 .docx 文件。请先把 .doc 文件另存为 .docx。", "error");
-        return false;
-      }
-      if ((currentMode === "pdfToWord" || currentMode === "pdfToPpt") && !name.endsWith(".pdf")) {
-        showStatus("这个模式需要上传 .pdf 文件。", "error");
-        return false;
-      }
-      if (currentMode === "pptToPdf" && !name.endsWith(".pptx")) {
-        showStatus("这个纯前端版本目前只支持 .pptx，不支持旧版 .ppt。", "error");
-        return false;
-      }
-      return true;
-    }
-
-    async function handleFile(file) {
-      if (!validateFile(file)) return;
-      currentFile = file;
-      clearBtn.disabled = false;
-      convertBtn.disabled = true;
-
-      if (currentMode === "wordToPdf") await renderWordDocx(file);
-      if (currentMode === "pdfToWord") await loadPdfForText(file);
-      if (currentMode === "pdfToPpt") await loadPdfForImages(file);
-      if (currentMode === "pptToPdf") await loadPptxForTextPdf(file);
-    }
-
-    async function renderWordDocx(file) {
-      preview.innerHTML = "";
-      updateFileInfo(file, replaceExtension(file.name, ".pdf"));
-      showStatus("正在读取 Word 文档，请稍等……");
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        if (!window.docxPreviewLib || !window.docxPreviewLib.renderAsync) {
-          throw new Error("Word 预览库加载失败，请刷新页面后重试。");
+      const modes = {
+        wordToPdf: {
+          title: "Word 文档转换成 PDF",
+          subtitle: "上传一个 .docx 文件，网页会先生成预览，然后你可以一键导出 PDF。文件在你的浏览器本地处理，不会上传到服务器。",
+          uploadTitle: "点击上传 Word 文档",
+          uploadText: "支持拖拽上传。推荐使用 .docx 文件。",
+          accept: ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          convertText: "选择路径并导出 PDF",
+          previewTitle: "Word 预览",
+          previewNote: "预览内容会作为 PDF 导出的基础。",
+          outputExt: ".pdf",
+          info: ["点击上传，选择一个 Word 的 .docx 文件。", "等待网页生成文档预览。", "点击导出按钮，可以选择保存文件夹和文件名。", "复杂排版可能和 Word 原文有细微差异。", "旧版 .doc 文件建议先用 Word 另存为 .docx。"]
+        },
+        pdfToWord: {
+          title: "PDF 转 Word",
+          subtitle: "上传 PDF 后，网页会提取文字并生成一个 .docx 文件。这个版本主要是文字版，不保证还原 PDF 的原始排版。",
+          uploadTitle: "点击上传 PDF 文件",
+          uploadText: "支持拖拽上传。输出为可打开的 .docx 文字文档。",
+          accept: ".pdf,application/pdf",
+          convertText: "选择路径并导出 Word 文件",
+          previewTitle: "PDF 文字预览",
+          previewNote: "这里显示从 PDF 中提取出的文字。扫描版 PDF 可能提取不到文字。",
+          outputExt: ".docx",
+          info: ["适合普通文字型 PDF。", "扫描版 PDF 本质是图片，不能直接提取文字。", "输出 Word 主要保留文字，不保证原始排版。", "如果要图片 OCR，需要接入 OCR 服务或后端。"]
+        },
+        pdfToPpt: {
+          title: "PDF 转 PPT",
+          subtitle: "上传 PDF 后，网页会把每一页 PDF 渲染成图片，然后每一页放进一张 PPT 幻灯片。这样外观比较稳定，但文字不可编辑。",
+          uploadTitle: "点击上传 PDF 文件",
+          uploadText: "支持拖拽上传。输出为 .pptx 文件。",
+          accept: ".pdf,application/pdf",
+          convertText: "选择路径并导出 PPT 文件",
+          previewTitle: "PDF 页面预览",
+          previewNote: "每一页 PDF 会变成 PPT 中的一张图片幻灯片。",
+          outputExt: ".pptx",
+          info: ["适合把 PDF 变成可展示的 PPT。", "每页 PDF 会作为图片插入 PPT。", "转换后的 PPT 外观较稳定。", "但 PPT 里的文字通常不可直接编辑。"]
+        },
+        pptToPdf: {
+          title: "PPT 转 PDF",
+          subtitle: "上传 .pptx 后，网页会提取每页幻灯片里的文字并生成 PDF。这个纯前端版本不能完整还原复杂 PowerPoint 排版。",
+          uploadTitle: "点击上传 PPTX 文件",
+          uploadText: "支持拖拽上传。当前主要支持 .pptx，不支持旧版 .ppt。",
+          accept: ".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          convertText: "选择路径并导出 PDF 文件",
+          previewTitle: "PPT 文字预览",
+          previewNote: "这里显示每张幻灯片提取出的文字内容。",
+          outputExt: ".pdf",
+          info: ["当前版本主要支持 .pptx。", "这里只能生成文字内容版 PDF。", "图片、动画、图表、母版和复杂排版不会完整还原。", "如果要高精度 PPT 转 PDF，需要后端转换服务。"]
         }
-        await window.docxPreviewLib.renderAsync(arrayBuffer, preview, null, {
-          className: "docx",
-          inWrapper: true,
-          ignoreWidth: false,
-          ignoreHeight: false,
-          ignoreFonts: false,
-          breakPages: true,
-          useBase64URL: true,
-          renderHeaders: true,
-          renderFooters: true
-        });
-        convertBtn.disabled = false;
-        aiBtn.disabled = false;
-        showStatus("Word 预览生成成功。现在可以导出 PDF。", "success");
-      } catch (error) {
-        console.error(error);
-        preview.innerHTML = '<div class="empty-preview">预览失败，请检查文件格式</div>';
-        showStatus("转换失败：请确认文件是正常的 .docx 文档。\n具体错误：" + getReadableError(error), "error");
+      };
+
+      let currentMode = "wordToPdf";
+      let currentFile = null;
+      let pdfDoc = null;
+      let pdfTextPages = [];
+      let pptExtractedSlides = [];
+      let isPickingFile = false;
+
+      function showStatus(message, type = "normal") {
+        statusBox.textContent = message;
+        statusBox.className = "status show";
+        if (type === "success") statusBox.classList.add("success");
+        if (type === "error") statusBox.classList.add("error");
       }
-    }
 
-    async function loadPdfDocument(file) {
-      if (!window.pdfjsLib) throw new Error("PDF.js 没有加载成功，请刷新页面。");
-      const arrayBuffer = await file.arrayBuffer();
-      return await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    }
+      function showAiStatus(message, type = "normal") {
+        aiBox.textContent = message;
+        aiBox.className = "status show";
+        if (type === "success") aiBox.classList.add("success");
+        if (type === "error") aiBox.classList.add("error");
+      }
 
-    async function loadPdfForText(file) {
-      preview.innerHTML = "";
-      updateFileInfo(file, replaceExtension(file.name, ".docx"));
-      showStatus("正在读取 PDF 并提取文字……");
-      try {
-        pdfDoc = await loadPdfDocument(file);
+      function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+        return (bytes / 1024 / 1024).toFixed(2) + " MB";
+      }
+
+      function replaceExtension(fileName, newExt) {
+        if (!/\.[^.]+$/.test(fileName)) return fileName + newExt;
+        return fileName.replace(/\.[^.]+$/i, "") + newExt;
+      }
+
+      function escapeHtml(text) {
+        return String(text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function downloadBlobNormally(blob, fileName) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 500);
+      }
+
+      async function saveBlobWithPicker(blob, fileName, mimeType, description) {
+        const safeBlob = blob instanceof Blob ? blob : new Blob([blob], { type: mimeType });
+
+        if (!window.isSecureContext || !window.showSaveFilePicker) {
+          downloadBlobNormally(safeBlob, fileName);
+          showStatus("当前浏览器不支持选择下载路径，文件已保存到默认下载文件夹。建议用 Chrome 或 Edge 打开 Netlify 网址。", "success");
+          return;
+        }
+
+        try {
+          const ext = fileName.slice(fileName.lastIndexOf("."));
+          const fileHandle = await window.showSaveFilePicker({
+            suggestedName: fileName,
+            types: [{ description: description, accept: { [mimeType]: [ext] } }],
+            excludeAcceptAllOption: false
+          });
+          const writable = await fileHandle.createWritable();
+          await writable.write(safeBlob);
+          await writable.close();
+        } catch (error) {
+          if (error && error.name === "AbortError") throw error;
+          console.warn("选择路径保存失败，已改用普通下载：", error);
+          downloadBlobNormally(safeBlob, fileName);
+          showStatus("选择路径保存失败，已自动保存到默认下载文件夹。", "success");
+        }
+      }
+
+      function getReadableError(error) {
+        if (!error) return "未知错误";
+        const name = error.name || "Error";
+        const message = error.message || String(error);
+        return name + ": " + message;
+      }
+
+      function updateFileInfo(file, outputName) {
+        fileInfo.innerHTML = "<strong>文件名：</strong>" + escapeHtml(file.name) + "<br>" +
+          "<strong>文件大小：</strong>" + formatFileSize(file.size) + "<br>" +
+          "<strong>导出文件：</strong>" + escapeHtml(outputName);
+      }
+
+      function renderInfoList() {
+        const info = modes[currentMode].info || [];
+        infoList.innerHTML = info.map(function (item) { return "<li>" + escapeHtml(item) + "</li>"; }).join("");
+        infoList.classList.toggle("warning-list", currentMode === "pdfToWord" || currentMode === "pptToPdf");
+      }
+
+      function clearAll() {
+        currentFile = null;
+        pdfDoc = null;
         pdfTextPages = [];
-        for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
-          const page = await pdfDoc.getPage(pageNum);
-          const textContent = await page.getTextContent();
-          const text = textContent.items.map(item => item.str).join(" ").replace(/\s+/g, " ").trim();
-          pdfTextPages.push(text || "【这一页没有可提取文字，可能是扫描图片 PDF。】");
-        }
-        preview.innerHTML = pdfTextPages.map((text, index) =>
-          '<div class="text-page"><div class="text-page-title">第 ' + (index + 1) + ' 页</div>' + escapeHtml(text) + '</div>'
-        ).join("");
-        convertBtn.disabled = false;
-        aiBtn.disabled = false;
-        showStatus("PDF 文字提取完成，共 " + pdfDoc.numPages + " 页。现在可以导出 Word。", "success");
-      } catch (error) {
-        console.error(error);
-        preview.innerHTML = '<div class="empty-preview">PDF 读取失败，请检查文件格式</div>';
-        showStatus("PDF 读取失败：请确认文件没有加密或损坏。\n具体错误：" + getReadableError(error), "error");
+        pptExtractedSlides = [];
+        fileInput.value = "";
+        convertBtn.disabled = true;
+        aiBtn.disabled = true;
+        clearBtn.disabled = true;
+        fileInfo.textContent = "当前还没有选择文件。";
+        statusBox.className = "status";
+        statusBox.textContent = "";
+        aiBox.className = "status";
+        aiBox.textContent = "";
+        preview.innerHTML = '<div class="empty-preview">上传文件后，这里会显示预览</div>';
       }
-    }
 
-    async function loadPdfForImages(file) {
-      preview.innerHTML = "";
-      updateFileInfo(file, replaceExtension(file.name, ".pptx"));
-      showStatus("正在读取 PDF 并生成页面预览……");
-      try {
-        pdfDoc = await loadPdfDocument(file);
+      function setMode(mode) {
+        if (!modes[mode]) return;
+        currentMode = mode;
+        const data = modes[mode];
+        modeButtons.forEach(function (btn) {
+          btn.classList.toggle("active", btn.dataset.mode === mode);
+        });
+        mainTitle.textContent = data.title;
+        mainSubtitle.textContent = data.subtitle;
+        uploadTitle.textContent = data.uploadTitle;
+        uploadText.textContent = data.uploadText;
+        fileInput.accept = data.accept;
+        convertBtn.textContent = data.convertText;
+        previewTitle.textContent = data.previewTitle;
+        previewNote.textContent = data.previewNote;
+        renderInfoList();
+        clearAll();
+      }
+
+      function validateFile(file) {
+        if (!file) return false;
+        const name = file.name.toLowerCase();
+        if (currentMode === "wordToPdf" && !name.endsWith(".docx")) {
+          showStatus("目前 Word 转 PDF 主要支持 .docx 文件。请先把 .doc 文件另存为 .docx。", "error");
+          return false;
+        }
+        if ((currentMode === "pdfToWord" || currentMode === "pdfToPpt") && !name.endsWith(".pdf")) {
+          showStatus("这个模式需要上传 .pdf 文件。", "error");
+          return false;
+        }
+        if (currentMode === "pptToPdf" && !name.endsWith(".pptx")) {
+          showStatus("这个纯前端版本目前只支持 .pptx，不支持旧版 .ppt。", "error");
+          return false;
+        }
+        return true;
+      }
+
+      async function handleFile(file) {
+        if (!validateFile(file)) return;
+        currentFile = file;
+        clearBtn.disabled = false;
+        convertBtn.disabled = true;
+        aiBtn.disabled = true;
+        aiBox.className = "status";
+        aiBox.textContent = "";
+
+        try {
+          if (currentMode === "wordToPdf") await renderWordDocx(file);
+          if (currentMode === "pdfToWord") await loadPdfForText(file);
+          if (currentMode === "pdfToPpt") await loadPdfForImages(file);
+          if (currentMode === "pptToPdf") await loadPptxForTextPdf(file);
+        } catch (error) {
+          console.error(error);
+          showStatus("上传后处理失败。\n具体错误：" + getReadableError(error), "error");
+        }
+      }
+
+      async function renderWordDocx(file) {
+        preview.innerHTML = "";
+        updateFileInfo(file, replaceExtension(file.name, ".pdf"));
+        showStatus("正在读取 Word 文档，请稍等……");
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          if (!window.docxPreviewLib || !window.docxPreviewLib.renderAsync) {
+            throw new Error("Word 预览库加载失败，请刷新页面后重试。");
+          }
+          await window.docxPreviewLib.renderAsync(arrayBuffer, preview, null, {
+            className: "docx",
+            inWrapper: true,
+            ignoreWidth: false,
+            ignoreHeight: false,
+            ignoreFonts: false,
+            breakPages: true,
+            useBase64URL: true,
+            renderHeaders: true,
+            renderFooters: true
+          });
+          convertBtn.disabled = false;
+          aiBtn.disabled = false;
+          showStatus("Word 预览生成成功。现在可以导出 PDF 或使用 AI 总结。", "success");
+        } catch (error) {
+          console.error(error);
+          preview.innerHTML = '<div class="empty-preview">预览失败，请检查文件格式</div>';
+          showStatus("转换失败：请确认文件是正常的 .docx 文档。\n具体错误：" + getReadableError(error), "error");
+        }
+      }
+
+      async function loadPdfDocument(file) {
+        if (!window.pdfjsLib) throw new Error("PDF.js 没有加载成功，请刷新页面。");
+        const arrayBuffer = await file.arrayBuffer();
+        return await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      }
+
+      async function loadPdfForText(file) {
+        preview.innerHTML = "";
+        updateFileInfo(file, replaceExtension(file.name, ".docx"));
+        showStatus("正在读取 PDF 并提取文字……");
+        try {
+          pdfDoc = await loadPdfDocument(file);
+          pdfTextPages = [];
+          for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+            const page = await pdfDoc.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            const text = textContent.items.map(function (item) { return item.str; }).join(" ").replace(/\s+/g, " ").trim();
+            pdfTextPages.push(text || "【这一页没有可提取文字，可能是扫描图片 PDF。】");
+          }
+          preview.innerHTML = pdfTextPages.map(function (text, index) {
+            return '<div class="text-page"><div class="text-page-title">第 ' + (index + 1) + ' 页</div>' + escapeHtml(text) + '</div>';
+          }).join("");
+          convertBtn.disabled = false;
+          aiBtn.disabled = false;
+          showStatus("PDF 文字提取完成，共 " + pdfDoc.numPages + " 页。现在可以导出 Word 或使用 AI 总结。", "success");
+        } catch (error) {
+          console.error(error);
+          preview.innerHTML = '<div class="empty-preview">PDF 读取失败，请检查文件格式</div>';
+          showStatus("PDF 读取失败：请确认文件没有加密或损坏。\n具体错误：" + getReadableError(error), "error");
+        }
+      }
+
+      async function loadPdfForImages(file) {
+        preview.innerHTML = "";
+        updateFileInfo(file, replaceExtension(file.name, ".pptx"));
+        showStatus("正在读取 PDF 并生成页面预览……");
+        try {
+          pdfDoc = await loadPdfDocument(file);
+          for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+            const page = await pdfDoc.getPage(pageNum);
+            const viewport = page.getViewport({ scale: 1.15 });
+            const canvas = document.createElement("canvas");
+            const context = canvas.getContext("2d");
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            await page.render({ canvasContext: context, viewport: viewport }).promise;
+            const img = document.createElement("img");
+            img.src = canvas.toDataURL("image/jpeg", 0.9);
+            img.className = "pdf-page-img";
+            img.alt = "PDF 第 " + pageNum + " 页";
+            preview.appendChild(img);
+          }
+          convertBtn.disabled = false;
+          aiBtn.disabled = false;
+          showStatus("PDF 页面预览生成成功，共 " + pdfDoc.numPages + " 页。现在可以导出 PPT。", "success");
+        } catch (error) {
+          console.error(error);
+          preview.innerHTML = '<div class="empty-preview">PDF 读取失败，请检查文件格式</div>';
+          showStatus("PDF 读取失败：请确认文件没有加密或损坏。\n具体错误：" + getReadableError(error), "error");
+        }
+      }
+
+      async function loadPptxForTextPdf(file) {
+        preview.innerHTML = "";
+        updateFileInfo(file, replaceExtension(file.name, ".pdf"));
+        showStatus("正在读取 PPTX 并提取文字……");
+        try {
+          if (!window.JSZip) throw new Error("JSZip 没有加载成功，请刷新页面。");
+          const arrayBuffer = await file.arrayBuffer();
+          const zip = await JSZip.loadAsync(arrayBuffer);
+          const slidePaths = Object.keys(zip.files)
+            .filter(function (path) { return /^ppt\/slides\/slide\d+\.xml$/i.test(path); })
+            .sort(function (a, b) {
+              return parseInt(a.match(/slide(\d+)\.xml/i)[1], 10) - parseInt(b.match(/slide(\d+)\.xml/i)[1], 10);
+            });
+          if (slidePaths.length === 0) throw new Error("没有找到幻灯片内容。");
+          const parser = new DOMParser();
+          pptExtractedSlides = [];
+          for (const path of slidePaths) {
+            const xmlText = await zip.files[path].async("text");
+            const xml = parser.parseFromString(xmlText, "application/xml");
+            const textNodes = Array.from(xml.getElementsByTagName("a:t"));
+            pptExtractedSlides.push(textNodes.map(function (node) { return node.textContent.trim(); }).filter(Boolean));
+          }
+          preview.innerHTML = pptExtractedSlides.map(function (texts, index) {
+            const body = texts.length ? texts.map(function (t) { return "<p>" + escapeHtml(t) + "</p>"; }).join("") : "<p>这一页没有可提取文字。</p>";
+            return '<section class="ppt-slide"><h3>Slide ' + (index + 1) + '</h3>' + body + '</section>';
+          }).join("");
+          convertBtn.disabled = false;
+          aiBtn.disabled = false;
+          showStatus("PPTX 文字提取完成，共 " + pptExtractedSlides.length + " 张幻灯片。现在可以导出文字版 PDF 或使用 AI 总结。", "success");
+        } catch (error) {
+          console.error(error);
+          preview.innerHTML = '<div class="empty-preview">PPTX 读取失败，请检查文件格式</div>';
+          showStatus("PPTX 读取失败：请确认文件是正常的 .pptx，而不是旧版 .ppt。\n具体错误：" + getReadableError(error), "error");
+        }
+      }
+
+      async function createPdfBlobFromPreview(fileName) {
+        if (!window.html2pdf) throw new Error("html2pdf 没有加载成功，请刷新页面。");
+        const options = {
+          margin: [8, 8, 8, 8],
+          filename: fileName,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: "#ffffff" },
+          jsPDF: { unit: "mm", format: "a4", orientation: currentMode === "pptToPdf" ? "landscape" : "portrait" },
+          pagebreak: { mode: ["css", "legacy"], avoid: ["table", "tr", "img"] }
+        };
+        return await html2pdf().set(options).from(preview).toPdf().outputPdf("blob");
+      }
+
+      async function exportWordToPdf() {
+        const fileName = replaceExtension(currentFile.name, ".pdf");
+        showStatus("正在生成 PDF……生成后会让你选择保存位置。");
+        const blob = await createPdfBlobFromPreview(fileName);
+        await saveBlobWithPicker(blob, fileName, "application/pdf", "PDF Document");
+        showStatus("PDF 已成功保存。", "success");
+      }
+
+      function splitTextIntoParagraphs(text) {
+        const normalized = String(text || "").replace(/\r/g, "").trim();
+        if (!normalized) return [];
+        const parts = normalized.split(/\n+|[。！？.!?]+\s*/).map(function (s) { return s.trim(); }).filter(Boolean);
+        return parts.length ? parts : [normalized];
+      }
+
+      async function exportPdfToWord() {
+        const fileName = replaceExtension(currentFile.name, ".docx");
+        showStatus("正在生成 Word 文档……");
+        if (!window.docx || !window.docx.Document || !window.docx.Packer) throw new Error("Word 生成库加载失败，请刷新页面后重试。");
+        const Document = window.docx.Document;
+        const Packer = window.docx.Packer;
+        const Paragraph = window.docx.Paragraph;
+        const TextRun = window.docx.TextRun;
+        const PageBreak = window.docx.PageBreak;
+        const children = [];
+        pdfTextPages.forEach(function (pageText, index) {
+          children.push(new Paragraph({ children: [new TextRun({ text: "第 " + (index + 1) + " 页", bold: true, size: 28 })], spacing: { after: 200 } }));
+          const paragraphs = splitTextIntoParagraphs(pageText);
+          if (paragraphs.length === 0) children.push(new Paragraph("这一页没有可提取文字。"));
+          paragraphs.forEach(function (paragraph) {
+            children.push(new Paragraph({ children: [new TextRun({ text: paragraph, size: 22 })], spacing: { after: 120 } }));
+          });
+          if (index < pdfTextPages.length - 1) children.push(new Paragraph({ children: [new PageBreak()] }));
+        });
+        const doc = new Document({ sections: [{ properties: {}, children: children }] });
+        const blob = await Packer.toBlob(doc);
+        await saveBlobWithPicker(blob, fileName, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "Word Document");
+        showStatus("Word 文件已成功保存。注意：这是文字提取版，不是原版排版复刻。", "success");
+      }
+
+      function loadExternalScript(src) {
+        return new Promise(function (resolve, reject) {
+          const existing = Array.from(document.scripts).find(function (script) { return script.src === src; });
+          if (existing && existing.dataset.loaded === "true") { resolve(); return; }
+          if (existing) {
+            existing.addEventListener("load", resolve, { once: true });
+            existing.addEventListener("error", reject, { once: true });
+            return;
+          }
+          const script = document.createElement("script");
+          script.src = src;
+          script.async = true;
+          script.dataset.dynamicLibrary = "pptxgenjs";
+          script.onload = function () { script.dataset.loaded = "true"; resolve(); };
+          script.onerror = function () { reject(new Error("脚本加载失败：" + src)); };
+          document.head.appendChild(script);
+        });
+      }
+
+      function getPptxConstructor() {
+        const possible = [window.pptxgen, window.pptxgenjs, window.PptxGenJS, window.PPTXGenJS, window.PptxGenJS && window.PptxGenJS.default, window.pptxgenjs && window.pptxgenjs.default];
+        return possible.find(function (item) { return typeof item === "function"; }) || null;
+      }
+
+      async function ensurePptxLibrary() {
+        let PptxConstructor = getPptxConstructor();
+        if (PptxConstructor) return PptxConstructor;
+        showStatus("正在加载 PDF 转 PPT 组件，请稍等……");
+        const urls = [
+          "https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js",
+          "https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgen.bundle.js",
+          "https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.min.js"
+        ];
+        for (const url of urls) {
+          try {
+            await loadExternalScript(url);
+            PptxConstructor = getPptxConstructor();
+            if (PptxConstructor) return PptxConstructor;
+          } catch (error) {
+            console.warn(error);
+          }
+        }
+        throw new Error("PDF 转 PPT 组件没有加载成功。请换 Chrome / Edge，或换一个网络后刷新页面。国内网络有时会拦截 jsDelivr、unpkg、cdnjs 这些 CDN。");
+      }
+
+      async function exportPdfToPpt() {
+        const fileName = replaceExtension(currentFile.name, ".pptx");
+        showStatus("正在生成 PPT……PDF 页数越多，等待时间越久。请不要关闭页面。");
+        if (!pdfDoc) pdfDoc = await loadPdfDocument(currentFile);
+        const firstPage = await pdfDoc.getPage(1);
+        const firstViewport = firstPage.getViewport({ scale: 1 });
+        const slideW = 10;
+        const slideH = slideW * (firstViewport.height / firstViewport.width);
+        const PptxConstructor = await ensurePptxLibrary();
+        const pptx = new PptxConstructor();
+        pptx.author = "ZZH File Converter";
+        pptx.subject = "PDF to PPT";
+        pptx.title = replaceExtension(currentFile.name, "");
+        pptx.company = "ZZH Tools";
+        pptx.defineLayout({ name: "PDF_LAYOUT", width: slideW, height: slideH });
+        pptx.layout = "PDF_LAYOUT";
         for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+          showStatus("正在生成 PPT：第 " + pageNum + " / " + pdfDoc.numPages + " 页……");
           const page = await pdfDoc.getPage(pageNum);
-          const viewport = page.getViewport({ scale: 1.15 });
+          const viewport = page.getViewport({ scale: 2 });
           const canvas = document.createElement("canvas");
           const context = canvas.getContext("2d");
           canvas.width = viewport.width;
           canvas.height = viewport.height;
           await page.render({ canvasContext: context, viewport: viewport }).promise;
-          const img = document.createElement("img");
-          img.src = canvas.toDataURL("image/jpeg", 0.9);
-          img.className = "pdf-page-img";
-          img.alt = "PDF 第 " + pageNum + " 页";
-          preview.appendChild(img);
+          const imgData = canvas.toDataURL("image/png");
+          const slide = pptx.addSlide();
+          slide.background = { color: "FFFFFF" };
+          slide.addImage({ data: imgData, x: 0, y: 0, w: slideW, h: slideH });
         }
-        convertBtn.disabled = false;
-        aiBtn.disabled = false;
-        showStatus("PDF 页面预览生成成功，共 " + pdfDoc.numPages + " 页。现在可以导出 PPT。", "success");
-      } catch (error) {
-        console.error(error);
-        preview.innerHTML = '<div class="empty-preview">PDF 读取失败，请检查文件格式</div>';
-        showStatus("PDF 读取失败：请确认文件没有加密或损坏。\n具体错误：" + getReadableError(error), "error");
-      }
-    }
-
-    async function loadPptxForTextPdf(file) {
-      preview.innerHTML = "";
-      updateFileInfo(file, replaceExtension(file.name, ".pdf"));
-      showStatus("正在读取 PPTX 并提取文字……");
-      try {
-        if (!window.JSZip) throw new Error("JSZip 没有加载成功，请刷新页面。");
-        const arrayBuffer = await file.arrayBuffer();
-        const zip = await JSZip.loadAsync(arrayBuffer);
-        const slidePaths = Object.keys(zip.files)
-          .filter(path => /^ppt\/slides\/slide\d+\.xml$/i.test(path))
-          .sort((a, b) => parseInt(a.match(/slide(\d+)\.xml/i)[1], 10) - parseInt(b.match(/slide(\d+)\.xml/i)[1], 10));
-        if (slidePaths.length === 0) throw new Error("没有找到幻灯片内容。");
-        const parser = new DOMParser();
-        pptExtractedSlides = [];
-        for (const path of slidePaths) {
-          const xmlText = await zip.files[path].async("text");
-          const xml = parser.parseFromString(xmlText, "application/xml");
-          const textNodes = Array.from(xml.getElementsByTagName("a:t"));
-          pptExtractedSlides.push(textNodes.map(node => node.textContent.trim()).filter(Boolean));
+        const pptMimeType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+        let result;
+        try {
+          result = await pptx.write({ outputType: "blob" });
+        } catch (error) {
+          result = await pptx.write({ outputType: "arraybuffer" });
         }
-        preview.innerHTML = pptExtractedSlides.map((texts, index) => {
-          const body = texts.length ? texts.map(t => "<p>" + escapeHtml(t) + "</p>").join("") : "<p>这一页没有可提取文字。</p>";
-          return '<section class="ppt-slide"><h3>Slide ' + (index + 1) + '</h3>' + body + '</section>';
-        }).join("");
-        convertBtn.disabled = false;
-        aiBtn.disabled = false;
-        showStatus("PPTX 文字提取完成，共 " + pptExtractedSlides.length + " 张幻灯片。现在可以导出文字版 PDF。", "success");
-      } catch (error) {
-        console.error(error);
-        preview.innerHTML = '<div class="empty-preview">PPTX 读取失败，请检查文件格式</div>';
-        showStatus("PPTX 读取失败：请确认文件是正常的 .pptx，而不是旧版 .ppt。\n具体错误：" + getReadableError(error), "error");
+        const blob = result instanceof Blob ? result : new Blob([result], { type: pptMimeType });
+        await saveBlobWithPicker(blob, fileName, pptMimeType, "PowerPoint Presentation");
+        showStatus("PPT 文件已成功保存。注意：每页 PDF 是作为图片放入 PPT 的，文字通常不可编辑。", "success");
       }
-    }
 
-    async function createPdfBlobFromPreview(fileName) {
-      if (!window.html2pdf) throw new Error("html2pdf 没有加载成功，请刷新页面。");
-      const options = {
-        margin: [8, 8, 8, 8],
-        filename: fileName,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: "#ffffff" },
-        jsPDF: { unit: "mm", format: "a4", orientation: currentMode === "pptToPdf" ? "landscape" : "portrait" },
-        pagebreak: { mode: ["css", "legacy"], avoid: ["table", "tr", "img"] }
-      };
-      return await html2pdf().set(options).from(preview).toPdf().outputPdf("blob");
-    }
+      async function exportPptToPdf() {
+        const fileName = replaceExtension(currentFile.name, ".pdf");
+        showStatus("正在生成文字版 PDF……");
+        const blob = await createPdfBlobFromPreview(fileName);
+        await saveBlobWithPicker(blob, fileName, "application/pdf", "PDF Document");
+        showStatus("PDF 已成功保存。注意：这是 PPTX 文字提取版，不是完整排版复刻。", "success");
+      }
 
-    async function exportWordToPdf() {
-      const fileName = replaceExtension(currentFile.name, ".pdf");
-      showStatus("正在生成 PDF……生成后会让你选择保存位置。");
-      const blob = await createPdfBlobFromPreview(fileName);
-      await saveBlobWithPicker(blob, fileName, "application/pdf", "PDF Document");
-      showStatus("PDF 已成功保存。", "success");
-    }
+      function getTextForAI() {
+        if (currentMode === "pdfToWord" && pdfTextPages.length) return pdfTextPages.join("\n\n");
+        if (currentMode === "pptToPdf" && pptExtractedSlides.length) {
+          return pptExtractedSlides.map(function (slide, index) {
+            return "Slide " + (index + 1) + ":\n" + slide.join("\n");
+          }).join("\n\n");
+        }
+        if (currentMode === "pdfToPpt" && pdfDoc) {
+          const text = preview.innerText || "";
+          return text.trim() || "用户上传了一个 PDF，网页会把 PDF 每一页转成图片并放进 PPT。请根据这个转换任务说明输出使用建议。";
+        }
+        return preview.innerText || "";
+      }
 
-    async function exportPdfToWord() {
-      const fileName = replaceExtension(currentFile.name, ".docx");
-      showStatus("正在生成 Word 文档……");
-      if (!window.docx || !window.docx.Document || !window.docx.Packer) throw new Error("Word 生成库加载失败，请刷新页面后重试。");
-      const Document = window.docx.Document;
-      const Packer = window.docx.Packer;
-      const Paragraph = window.docx.Paragraph;
-      const TextRun = window.docx.TextRun;
-      const PageBreak = window.docx.PageBreak;
-      const children = [];
-      pdfTextPages.forEach((pageText, index) => {
-        children.push(new Paragraph({ children: [new TextRun({ text: "第 " + (index + 1) + " 页", bold: true, size: 28 })], spacing: { after: 200 } }));
-        const sentences = pageText.split(/(?<=[。！？.!?])\s+/).filter(Boolean);
-        if (sentences.length === 0) children.push(new Paragraph("这一页没有可提取文字。"));
-        sentences.forEach(sentence => children.push(new Paragraph({ children: [new TextRun({ text: sentence, size: 22 })], spacing: { after: 120 } })));
-        if (index < pdfTextPages.length - 1) children.push(new Paragraph({ children: [new PageBreak()] }));
-      });
-      const doc = new Document({ sections: [{ properties: {}, children: children }] });
-      const blob = await Packer.toBlob(doc);
-      await saveBlobWithPicker(blob, fileName, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "Word Document");
-      showStatus("Word 文件已成功保存。注意：这是文字提取版，不是原版排版复刻。", "success");
-    }
-
-    function loadExternalScript(src) {
-      return new Promise((resolve, reject) => {
-        const existing = Array.from(document.scripts).find(script => script.src === src);
-        if (existing && existing.dataset.loaded === "true") { resolve(); return; }
-        if (existing) {
-          existing.addEventListener("load", resolve, { once: true });
-          existing.addEventListener("error", reject, { once: true });
+      async function askAI() {
+        const text = getTextForAI();
+        if (!text || text.trim().length < 20) {
+          showAiStatus("没有足够的文字可以给 AI 总结。请先上传文件并生成预览。", "error");
           return;
         }
-        const script = document.createElement("script");
-        script.src = src;
-        script.async = true;
-        script.dataset.dynamicLibrary = "pptxgenjs";
-        script.onload = () => { script.dataset.loaded = "true"; resolve(); };
-        script.onerror = () => reject(new Error("脚本加载失败：" + src));
-        document.head.appendChild(script);
-      });
-    }
-
-    function getPptxConstructor() {
-      const possible = [window.pptxgen, window.pptxgenjs, window.PptxGenJS, window.PPTXGenJS, window.PptxGenJS && window.PptxGenJS.default, window.pptxgenjs && window.pptxgenjs.default];
-      return possible.find(item => typeof item === "function") || null;
-    }
-
-    async function ensurePptxLibrary() {
-      let PptxConstructor = getPptxConstructor();
-      if (PptxConstructor) return PptxConstructor;
-      showStatus("正在加载 PDF 转 PPT 组件，请稍等……");
-      const urls = [
-        "https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js",
-        "https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgen.bundle.js",
-        "https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.min.js"
-      ];
-      for (const url of urls) {
+        aiBtn.disabled = true;
+        showAiStatus("AI 正在分析文档，请稍等……");
         try {
-          await loadExternalScript(url);
-          PptxConstructor = getPptxConstructor();
-          if (PptxConstructor) return PptxConstructor;
+          const response = await fetch("/.netlify/functions/ai-summary", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: text, task: "summary" })
+          });
+          let data = {};
+          try {
+            data = await response.json();
+          } catch (jsonError) {
+            throw new Error("AI Function 没有返回 JSON。请检查 netlify/functions/ai-summary.js 是否已经创建并部署。");
+          }
+          if (!response.ok) throw new Error(data.error || "AI 请求失败。请检查 OPENAI_API_KEY 或 Function 部署状态。");
+          showAiStatus(data.result || "AI 没有返回内容。", "success");
         } catch (error) {
-          console.warn(error);
+          console.error(error);
+          showAiStatus("AI 分析失败：" + getReadableError(error), "error");
+        } finally {
+          aiBtn.disabled = false;
         }
       }
-      throw new Error("PDF 转 PPT 组件没有加载成功。请换 Chrome / Edge，或换一个网络后刷新页面。国内网络有时会拦截 jsDelivr、unpkg、cdnjs 这些 CDN。");
-    }
 
-    async function exportPdfToPpt() {
-      const fileName = replaceExtension(currentFile.name, ".pptx");
-      showStatus("正在生成 PPT……PDF 页数越多，等待时间越久。请不要关闭页面。");
-      if (!pdfDoc) pdfDoc = await loadPdfDocument(currentFile);
-      const firstPage = await pdfDoc.getPage(1);
-      const firstViewport = firstPage.getViewport({ scale: 1 });
-      const slideW = 10;
-      const slideH = slideW * (firstViewport.height / firstViewport.width);
-      const PptxConstructor = await ensurePptxLibrary();
-      const pptx = new PptxConstructor();
-      pptx.author = "ZZH File Converter";
-      pptx.subject = "PDF to PPT";
-      pptx.title = replaceExtension(currentFile.name, "");
-      pptx.company = "ZZH Tools";
-      pptx.defineLayout({ name: "PDF_LAYOUT", width: slideW, height: slideH });
-      pptx.layout = "PDF_LAYOUT";
-      for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
-        showStatus("正在生成 PPT：第 " + pageNum + " / " + pdfDoc.numPages + " 页……");
-        const page = await pdfDoc.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2 });
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        await page.render({ canvasContext: context, viewport: viewport }).promise;
-        const imgData = canvas.toDataURL("image/png");
-        const slide = pptx.addSlide();
-        slide.background = { color: "FFFFFF" };
-        slide.addImage({ data: imgData, x: 0, y: 0, w: slideW, h: slideH });
-      }
-      const pptMimeType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-      let result;
-      try {
-        result = await pptx.write({ outputType: "blob" });
-      } catch (error) {
-        result = await pptx.write({ outputType: "arraybuffer" });
-      }
-      const blob = result instanceof Blob ? result : new Blob([result], { type: pptMimeType });
-      await saveBlobWithPicker(blob, fileName, pptMimeType, "PowerPoint Presentation");
-      showStatus("PPT 文件已成功保存。注意：每页 PDF 是作为图片放入 PPT 的，文字通常不可编辑。", "success");
-    }
-
-    async function exportPptToPdf() {
-      const fileName = replaceExtension(currentFile.name, ".pdf");
-      showStatus("正在生成文字版 PDF……");
-      const blob = await createPdfBlobFromPreview(fileName);
-      await saveBlobWithPicker(blob, fileName, "application/pdf", "PDF Document");
-      showStatus("PDF 已成功保存。注意：这是 PPTX 文字提取版，不是完整排版复刻。", "success");
-    }
-
-    function getTextForAI() {
-      if (currentMode === "pdfToWord" && pdfTextPages.length) {
-        return pdfTextPages.join("
-
-");
-      }
-
-      if (currentMode === "pptToPdf" && pptExtractedSlides.length) {
-        return pptExtractedSlides
-          .map((slide, index) => "Slide " + (index + 1) + ":
-" + slide.join("
-"))
-          .join("
-
-");
-      }
-
-      if (currentMode === "pdfToPpt" && pdfDoc) {
-        const text = preview.innerText || "";
-        return text.trim() || "用户上传了一个 PDF，网页会把 PDF 每一页转成图片并放进 PPT。请根据这个转换任务说明输出使用建议。";
-      }
-
-      return preview.innerText || "";
-    }
-
-    async function askAI() {
-      const text = getTextForAI();
-
-      if (!text || text.trim().length < 20) {
-        aiBox.textContent = "没有足够的文字可以给 AI 总结。请先上传文件并生成预览。";
-        aiBox.className = "status show error";
-        return;
-      }
-
-      aiBtn.disabled = true;
-      aiBox.textContent = "AI 正在分析文档，请稍等……";
-      aiBox.className = "status show";
-
-      try {
-        const response = await fetch("/.netlify/functions/ai-summary", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: text, task: "summary" })
-        });
-
-        let data = {};
+      async function exportFile() {
+        if (!currentFile) { showStatus("请先上传文件。", "error"); return; }
+        convertBtn.disabled = true;
         try {
-          data = await response.json();
-        } catch (jsonError) {
-          throw new Error("AI Function 没有返回 JSON。请检查 netlify/functions/ai-summary.js 是否已经创建并部署。");
+          if (currentMode === "wordToPdf") await exportWordToPdf();
+          if (currentMode === "pdfToWord") await exportPdfToWord();
+          if (currentMode === "pdfToPpt") await exportPdfToPpt();
+          if (currentMode === "pptToPdf") await exportPptToPdf();
+        } catch (error) {
+          console.error(error);
+          if (error && error.name === "AbortError") {
+            showStatus("你取消了保存操作，文件没有被下载。", "error");
+          } else {
+            showStatus("生成或保存失败。请先刷新页面再试一次。\n具体错误：" + getReadableError(error), "error");
+          }
+        } finally {
+          convertBtn.disabled = false;
         }
-
-        if (!response.ok) {
-          throw new Error(data.error || "AI 请求失败。请检查 OPENAI_API_KEY 或 Function 部署状态。");
-        }
-
-        aiBox.textContent = data.result || "AI 没有返回内容。";
-        aiBox.className = "status show success";
-      } catch (error) {
-        console.error(error);
-        aiBox.textContent = "AI 分析失败：" + getReadableError(error);
-        aiBox.className = "status show error";
-      } finally {
-        aiBtn.disabled = false;
       }
-    }
 
-    async function exportFile() {
-      if (!currentFile) { showStatus("请先上传文件。", "error"); return; }
-      convertBtn.disabled = true;
-      try {
-        if (currentMode === "wordToPdf") await exportWordToPdf();
-        if (currentMode === "pdfToWord") await exportPdfToWord();
-        if (currentMode === "pdfToPpt") await exportPdfToPpt();
-        if (currentMode === "pptToPdf") await exportPptToPdf();
-      } catch (error) {
-        console.error(error);
-        if (error && error.name === "AbortError") {
-          showStatus("你取消了保存操作，文件没有被下载。", "error");
-        } else {
-          showStatus("生成或保存失败。请先刷新页面再试一次。\n具体错误：" + getReadableError(error), "error");
-        }
-      } finally {
-        convertBtn.disabled = false;
-        aiBtn.disabled = false;
+      function openFilePicker() {
+        if (isPickingFile) return;
+        isPickingFile = true;
+        fileInput.value = "";
+        fileInput.click();
+        setTimeout(function () { isPickingFile = false; }, 600);
       }
-    }
 
-    function runSelfTests() {
-      console.assert(replaceExtension("test.pdf", ".pptx") === "test.pptx", "replaceExtension pdf -> pptx failed");
-      console.assert(replaceExtension("a.b.c.docx", ".pdf") === "a.b.c.pdf", "replaceExtension complex name failed");
-      console.assert(formatFileSize(1024) === "1.0 KB", "formatFileSize KB failed");
-      console.assert(escapeHtml("<a>&\"").includes("&lt;a&gt;"), "escapeHtml failed");
-      console.assert(Boolean(modes.wordToPdf && modes.pdfToWord && modes.pdfToPpt && modes.pptToPdf), "modes missing");
-      console.log("ZZH converter self-tests passed.");
-    }
+      function runSelfTests() {
+        console.assert(replaceExtension("test.pdf", ".pptx") === "test.pptx", "replaceExtension pdf -> pptx failed");
+        console.assert(replaceExtension("a.b.c.docx", ".pdf") === "a.b.c.pdf", "replaceExtension complex name failed");
+        console.assert(replaceExtension("filename", ".pdf") === "filename.pdf", "replaceExtension no extension failed");
+        console.assert(formatFileSize(1024) === "1.0 KB", "formatFileSize KB failed");
+        console.assert(escapeHtml("<a>&\"").includes("&lt;a&gt;"), "escapeHtml failed");
+        console.assert(Boolean(fileInput && chooseFileBtn && uploadCard && convertBtn && aiBtn), "required DOM elements missing");
+        console.assert(modes.wordToPdf.accept.includes(".docx"), "word accept missing docx");
+        console.assert(modes.pdfToPpt.accept.includes(".pdf"), "pdf accept missing pdf");
+        console.log("ZZH converter self-tests passed.");
+      }
 
-    modeButtons.forEach(btn => {
-      btn.addEventListener("click", event => {
-        event.preventDefault();
-        setMode(btn.dataset.mode);
+      modeButtons.forEach(function (btn) {
+        btn.addEventListener("click", function (event) {
+          event.preventDefault();
+          setMode(btn.dataset.mode);
+        });
       });
+
+      chooseFileBtn.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        openFilePicker();
+      });
+
+      uploadCard.addEventListener("click", function (event) {
+        if (event.target === chooseFileBtn) return;
+        openFilePicker();
+      });
+
+      uploadCard.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openFilePicker();
+        }
+      });
+
+      fileInput.addEventListener("change", function (event) {
+        const file = event.target.files && event.target.files[0];
+        if (!file) {
+          showStatus("没有选择文件。", "error");
+          return;
+        }
+        handleFile(file);
+      });
+
+      convertBtn.addEventListener("click", exportFile);
+      aiBtn.addEventListener("click", askAI);
+      clearBtn.addEventListener("click", clearAll);
+
+      uploadCard.addEventListener("dragover", function (event) {
+        event.preventDefault();
+        uploadCard.classList.add("drag-over");
+      });
+
+      uploadCard.addEventListener("dragleave", function () {
+        uploadCard.classList.remove("drag-over");
+      });
+
+      uploadCard.addEventListener("drop", function (event) {
+        event.preventDefault();
+        uploadCard.classList.remove("drag-over");
+        const file = event.dataTransfer.files && event.dataTransfer.files[0];
+        if (!file) {
+          showStatus("没有检测到拖拽文件。", "error");
+          return;
+        }
+        handleFile(file);
+      });
+
+      renderInfoList();
+      runSelfTests();
     });
-
-    chooseFileBtn.addEventListener("click", event => {
-      event.preventDefault();
-      event.stopPropagation();
-      fileInput.click();
-    });
-
-    fileInput.addEventListener("change", event => {
-      const file = event.target.files[0];
-      handleFile(file);
-    });
-
-    convertBtn.addEventListener("click", exportFile);
-    aiBtn.addEventListener("click", askAI);
-    clearBtn.addEventListener("click", clearAll);
-
-    uploadCard.addEventListener("dragover", event => {
-      event.preventDefault();
-      uploadCard.classList.add("drag-over");
-    });
-
-    uploadCard.addEventListener("dragleave", () => uploadCard.classList.remove("drag-over"));
-
-    uploadCard.addEventListener("drop", event => {
-      event.preventDefault();
-      uploadCard.classList.remove("drag-over");
-      const file = event.dataTransfer.files[0];
-      handleFile(file);
-    });
-
-    renderInfoList();
-    runSelfTests();
   </script>
 </body>
 </html>

@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Word 转 PDF 工具</title>
+
+  <!--
+    说明：
+    1. 这个网页主要支持 .docx 文件。
+    2. 它在浏览器本地完成转换，不会把文件上传到服务器。
+    3. 复杂 Word 格式，例如页眉页脚、复杂表格、数学公式、特殊字体，可能无法 100% 还原。
+  -->
+
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docx-preview@0.3.6/dist/docx-preview.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+      background: linear-gradient(135deg, #edf2ff, #f8fafc);
+      min-height: 100vh;
+      color: #1f2937;
+      padding: 32px;
+    }
+
+    .app {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .hero {
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      border-radius: 28px;
+      padding: 34px;
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.1);
+      margin-bottom: 24px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #eef2ff;
+      color: #4338ca;
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-size: clamp(32px, 5vw, 54px);
+      line-height: 1.08;
+      letter-spacing: -1.5px;
+      margin-bottom: 14px;
+      color: #111827;
+    }
+
+    .subtitle {
+      max-width: 720px;
+      color: #4b5563;
+      font-size: 17px;
+      line-height: 1.75;
+      margin-bottom: 26px;
+    }
+
+    .upload-card {
+      border: 2px dashed #a5b4fc;
+      background: #f8faff;
+      border-radius: 24px;
+      padding: 34px;
+      text-align: center;
+      transition: 0.25s ease;
+      cursor: pointer;
+    }
+
+    .upload-card:hover,
+    .upload-card.drag-over {
+      border-color: #4f46e5;
+      background: #eef2ff;
+      transform: translateY(-2px);
+    }
+
+    .upload-icon {
+      width: 68px;
+      height: 68px;
+      border-radius: 20px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 16px;
+      background: #4f46e5;
+      color: white;
+      font-size: 34px;
+      box-shadow: 0 16px 30px rgba(79, 70, 229, 0.26);
+    }
+
+    .upload-title {
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .upload-text {
+      color: #6b7280;
+      margin-bottom: 18px;
+      line-height: 1.6;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: center;
+      margin-top: 22px;
+    }
+
+    button {
+      border: none;
+      border-radius: 14px;
+      padding: 13px 20px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    .primary-btn {
+      background: #4f46e5;
+      color: white;
+      box-shadow: 0 14px 24px rgba(79, 70, 229, 0.24);
+    }
+
+    .primary-btn:hover:not(:disabled) {
+      background: #4338ca;
+      transform: translateY(-1px);
+    }
+
+    .secondary-btn {
+      background: white;
+      color: #374151;
+      border: 1px solid #e5e7eb;
+    }
+
+    .secondary-btn:hover:not(:disabled) {
+      background: #f9fafb;
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .status {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: #f9fafb;
+      color: #4b5563;
+      font-size: 14px;
+      line-height: 1.6;
+      display: none;
+    }
+
+    .status.show {
+      display: block;
+    }
+
+    .status.success {
+      background: #ecfdf5;
+      color: #047857;
+    }
+
+    .status.error {
+      background: #fef2f2;
+      color: #b91c1c;
+    }
+
+    .panel {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .side-card,
+    .preview-wrap {
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 24px;
+      box-shadow: 0 18px 46px rgba(15, 23, 42, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+    }
+
+    .side-card {
+      padding: 24px;
+      position: sticky;
+      top: 24px;
+    }
+
+    .side-card h2,
+    .preview-header h2 {
+      font-size: 20px;
+      margin-bottom: 14px;
+      color: #111827;
+    }
+
+    .info-list {
+      list-style: none;
+      display: grid;
+      gap: 12px;
+      color: #4b5563;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .info-list li {
+      padding-left: 24px;
+      position: relative;
+    }
+
+    .info-list li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: #4f46e5;
+      font-weight: 900;
+    }
+
+    .file-info {
+      margin-top: 20px;
+      padding: 16px;
+      background: #f9fafb;
+      border-radius: 16px;
+      font-size: 14px;
+      color: #4b5563;
+      line-height: 1.7;
+      word-break: break-word;
+    }
+
+    .preview-wrap {
+      overflow: hidden;
+    }
+
+    .preview-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 22px 24px;
+      border-bottom: 1px solid #e5e7eb;
+      background: #ffffff;
+    }
+
+    .preview-note {
+      color: #6b7280;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .preview-scroll {
+      max-height: 760px;
+      overflow: auto;
+      padding: 28px;
+      background: #e5e7eb;
+    }
+
+    #preview {
+      min-height: 520px;
+      background: white;
+      padding: 28px;
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
+    }
+
+    .empty-preview {
+      min-height: 460px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: #9ca3af;
+      font-weight: 700;
+      border: 2px dashed #d1d5db;
+      border-radius: 18px;
+      background: #f9fafb;
+    }
+
+    .docx-wrapper {
+      background: transparent !important;
+      padding: 0 !important;
+    }
+
+    .docx-wrapper > section.docx {
+      margin: 0 auto 18px !important;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12) !important;
+    }
+
+    @media (max-width: 860px) {
+      body {
+        padding: 18px;
+      }
+
+      .hero {
+        padding: 24px;
+      }
+
+      .panel {
+        grid-template-columns: 1fr;
+      }
+
+      .side-card {
+        position: static;
+      }
+
+      .preview-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="hero">
+      <div class="badge">📄 本地转换 · Word to PDF</div>
+      <h1>Word 文档转换成 PDF</h1>
+      <p class="subtitle">
+        上传一个 <strong>.docx</strong> 文件，网页会先生成预览，然后你可以一键导出 PDF。
+        文件在你的浏览器本地处理，不会上传到服务器。
+      </p>
+
+      <label class="upload-card" id="uploadCard" for="fileInput">
+        <div class="upload-icon">↑</div>
+        <div class="upload-title">点击上传 Word 文档</div>
+        <div class="upload-text">支持拖拽上传。推荐使用 .docx 文件。</div>
+        <button class="secondary-btn" type="button" onclick="document.getElementById('fileInput').click()">选择文件</button>
+        <input id="fileInput" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+      </label>
+
+      <div class="actions">
+        <button id="convertBtn" class="primary-btn" disabled>选择路径并导出 PDF</button>
+        <button id="clearBtn" class="secondary-btn" disabled>清空文件</button>
+      </div>
+
+      <div id="status" class="status"></div>
+    </section>
+
+    <section class="panel">
+      <aside class="side-card">
+        <h2>使用说明</h2>
+        <ul class="info-list">
+          <li>点击上传，选择一个 Word 的 .docx 文件。</li>
+          <li>等待网页生成文档预览。</li>
+          <li>点击“选择路径并导出 PDF”，可以选择保存的文件夹和文件名。</li>
+          <li>复杂排版可能和 Word 原文有细微差异。</li>
+          <li>旧版 .doc 文件建议先用 Word 另存为 .docx。</li>
+          <li>如果浏览器不支持选择路径功能，会自动使用默认下载文件夹。</li>
+        </ul>
+
+        <div class="file-info" id="fileInfo">
+          当前还没有选择文件。
+        </div>
+      </aside>
+
+      <section class="preview-wrap">
+        <div class="preview-header">
+          <div>
+            <h2>文档预览</h2>
+            <p class="preview-note">预览内容会作为 PDF 导出的基础。</p>
+          </div>
+        </div>
+
+        <div class="preview-scroll">
+          <div id="preview">
+            <div class="empty-preview">上传 .docx 后，这里会显示预览</div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const uploadCard = document.getElementById("uploadCard");
+    const preview = document.getElementById("preview");
+    const statusBox = document.getElementById("status");
+    const convertBtn = document.getElementById("convertBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const fileInfo = document.getElementById("fileInfo");
+
+    let currentFile = null;
+
+    function showStatus(message, type = "normal") {
+      statusBox.textContent = message;
+      statusBox.className = "status show";
+      if (type === "success") statusBox.classList.add("success");
+      if (type === "error") statusBox.classList.add("error");
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+      return (bytes / 1024 / 1024).toFixed(2) + " MB";
+    }
+
+    function getPdfFileName(fileName) {
+      return fileName.replace(/\.docx$/i, "") + ".pdf";
+    }
+
+    async function renderDocx(file) {
+      if (!file) return;
+
+      const isDocx = file.name.toLowerCase().endsWith(".docx");
+      if (!isDocx) {
+        showStatus("目前这个网页主要支持 .docx 文件。请先把 .doc 文件另存为 .docx。", "error");
+        return;
+      }
+
+      currentFile = file;
+      convertBtn.disabled = true;
+      clearBtn.disabled = false;
+      preview.innerHTML = "";
+      showStatus("正在读取 Word 文档，请稍等……");
+
+      fileInfo.innerHTML = `
+        <strong>文件名：</strong>${file.name}<br>
+        <strong>文件大小：</strong>${formatFileSize(file.size)}<br>
+        <strong>导出文件：</strong>${getPdfFileName(file.name)}
+      `;
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+
+        await docx.renderAsync(arrayBuffer, preview, null, {
+          className: "docx",
+          inWrapper: true,
+          ignoreWidth: false,
+          ignoreHeight: false,
+          ignoreFonts: false,
+          breakPages: true,
+          useBase64URL: true,
+          renderHeaders: true,
+          renderFooters: true
+        });
+
+        convertBtn.disabled = false;
+        showStatus("预览生成成功。现在可以点击“导出为 PDF”。", "success");
+      } catch (error) {
+        console.error(error);
+        preview.innerHTML = '<div class="empty-preview">预览失败，请检查文件格式</div>';
+        showStatus("转换失败：请确认文件是正常的 .docx 文档。", "error");
+      }
+    }
+
+    async function createPdfBlob() {
+      const options = {
+        margin: [8, 8, 8, 8],
+        filename: getPdfFileName(currentFile.name),
+        image: {
+          type: "jpeg",
+          quality: 0.98
+        },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          letterRendering: true,
+          backgroundColor: "#ffffff"
+        },
+        jsPDF: {
+          unit: "mm",
+          format: "a4",
+          orientation: "portrait"
+        },
+        pagebreak: {
+          mode: ["css", "legacy"],
+          avoid: ["table", "tr", "img"]
+        }
+      };
+
+      return await html2pdf()
+        .set(options)
+        .from(preview)
+        .toPdf()
+        .outputPdf("blob");
+    }
+
+    function downloadBlobNormally(blob, fileName) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function saveBlobWithPicker(blob, fileName) {
+      if (!window.showSaveFilePicker) {
+        downloadBlobNormally(blob, fileName);
+        showStatus("当前浏览器不支持选择下载路径，PDF 已保存到默认下载文件夹。建议用 Chrome 或 Edge 获得选择路径功能。", "success");
+        return;
+      }
+
+      const fileHandle = await window.showSaveFilePicker({
+        suggestedName: fileName,
+        types: [
+          {
+            description: "PDF Document",
+            accept: {
+              "application/pdf": [".pdf"]
+            }
+          }
+        ]
+      });
+
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+    }
+
+    async function exportPdf() {
+      if (!currentFile) {
+        showStatus("请先上传一个 .docx 文件。", "error");
+        return;
+      }
+
+      convertBtn.disabled = true;
+      const fileName = getPdfFileName(currentFile.name);
+      showStatus("正在生成 PDF……生成后会让你选择保存位置。");
+
+      try {
+        const blob = await createPdfBlob();
+        await saveBlobWithPicker(blob, fileName);
+        showStatus("PDF 已成功保存。", "success");
+      } catch (error) {
+        console.error(error);
+
+        if (error && error.name === "AbortError") {
+          showStatus("你取消了保存操作，PDF 没有被下载。", "error");
+        } else {
+          showStatus("PDF 生成或保存失败，请尝试换一个较简单的 Word 文档。", "error");
+        }
+      } finally {
+        convertBtn.disabled = false;
+      }
+    }
+
+    function clearAll() {
+      currentFile = null;
+      fileInput.value = "";
+      convertBtn.disabled = true;
+      clearBtn.disabled = true;
+      fileInfo.textContent = "当前还没有选择文件。";
+      statusBox.className = "status";
+      statusBox.textContent = "";
+      preview.innerHTML = '<div class="empty-preview">上传 .docx 后，这里会显示预览</div>';
+    }
+
+    fileInput.addEventListener("change", (event) => {
+      const file = event.target.files[0];
+      renderDocx(file);
+    });
+
+    convertBtn.addEventListener("click", exportPdf);
+    clearBtn.addEventListener("click", clearAll);
+
+    uploadCard.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      uploadCard.classList.add("drag-over");
+    });
+
+    uploadCard.addEventListener("dragleave", () => {
+      uploadCard.classList.remove("drag-over");
+    });
+
+    uploadCard.addEventListener("drop", (event) => {
+      event.preventDefault();
+      uploadCard.classList.remove("drag-over");
+      const file = event.dataTransfer.files[0];
+      renderDocx(file);
+    });
+  </script>
+</body>
+</html>

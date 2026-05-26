@@ -33,6 +33,7 @@
 
   <!-- PDF -> PPT -->
   <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+  <script src="https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 
   <style>
     * {
@@ -1009,6 +1010,52 @@
       showStatus("Word 文件已成功保存。注意：这是文字提取版，不是原版排版复刻。", "success");
     }
 
+    function loadExternalScript(src) {
+      return new Promise((resolve, reject) => {
+        const existing = Array.from(document.scripts).find(script => script.src === src);
+        if (existing) {
+          existing.addEventListener("load", resolve, { once: true });
+          existing.addEventListener("error", reject, { once: true });
+          setTimeout(resolve, 300);
+          return;
+        }
+
+        const script = document.createElement("script");
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error("脚本加载失败：" + src));
+        document.head.appendChild(script);
+      });
+    }
+
+    function getPptxConstructor() {
+      // 不同 CDN / 版本可能暴露不同的全局变量名。
+      return window.pptxgen || window.pptxgenjs || window.PptxGenJS || window.PPTXGenJS || null;
+    }
+
+    async function ensurePptxLibrary() {
+      let PptxConstructor = getPptxConstructor();
+      if (PptxConstructor) return PptxConstructor;
+
+      const urls = [
+        "https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js",
+        "https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgen.bundle.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.min.js"
+      ];
+
+      for (const url of urls) {
+        try {
+          await loadExternalScript(url);
+          PptxConstructor = getPptxConstructor();
+          if (PptxConstructor) return PptxConstructor;
+        } catch (error) {
+          console.warn(error);
+        }
+      }
+
+      throw new Error("PPT 生成库没有加载成功。请刷新网页，或检查浏览器是否屏蔽了 jsdelivr / unpkg / cdnjs。国内网络有时会拦截这些 CDN。 ");
+    }
+
     async function exportPdfToPpt() {
       const fileName = replaceExtension(currentFile.name, ".pptx");
       showStatus("正在生成 PPT……PDF 页数越多，等待时间越久。请不要关闭页面。");
@@ -1022,7 +1069,8 @@
       const slideW = 10;
       const slideH = slideW * (firstViewport.height / firstViewport.width);
 
-      const pptx = new pptxgen();
+      const PptxConstructor = await ensurePptxLibrary();
+      const pptx = new PptxConstructor();
       pptx.author = "ZZH File Converter";
       pptx.subject = "PDF to PPT";
       pptx.title = replaceExtension(currentFile.name, "");
@@ -1091,7 +1139,8 @@
         if (error && error.name === "AbortError") {
           showStatus("你取消了保存操作，文件没有被下载。", "error");
         } else {
-          showStatus("生成或保存失败。请先刷新页面再试一次。\n具体错误：" + getReadableError(error), "error");
+          showStatus("生成或保存失败。请先刷新页面再试一次。
+具体错误：" + getReadableError(error), "error");
         }
       } finally {
         convertBtn.disabled = false;
